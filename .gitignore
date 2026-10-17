@@ -1,0 +1,29 @@
+# Node / frontend
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Python / backend
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+db.sqlite3
+
+# Cloudflare
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+
+# Env / secrets
+.env*
+!.env.example
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

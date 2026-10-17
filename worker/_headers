@@ -1,0 +1,9 @@
+# Copied into frontend/dist by `pnpm build`. Workers Static Assets applies these rules.
+# Vite emits content-hashed files under /assets/, so they can be cached forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Unhashed files (index.html, favicon) keep the platform default (ETag revalidation), so new deploys show up at once.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

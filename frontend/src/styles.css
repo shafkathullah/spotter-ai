@@ -1,0 +1,404 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Tokens ported from the PocketWebTools design system (DESIGN.md v2, light
+ * theme only): white surfaces on a blue-grey ground, one blue accent, black
+ * primary buttons, depth by layered shadow (never a surface border), radii
+ * 2 / 4 / 8 concentric. Three families, one job each:
+ *   Faculty Glyphic  display, 28px and up, weight 400 only
+ *   Inter            body and UI
+ *   JetBrains Mono   uppercase microlabels and chips, 14px and under
+ * Fonts are self-hosted woff2 under /fonts (SIL OFL), latin + latin-ext.
+ *
+ * The risk palette (Low .. No Travel) is this app's own data palette. The same
+ * hex values live in src/lib/risk.ts for MapLibre, which cannot read CSS
+ * variables; src/lib/risk.test.ts fails if the two drift apart.
+ */
+
+@font-face {
+  font-family: "Faculty Glyphic";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/faculty-glyphic-latin-ext-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Faculty Glyphic";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/faculty-glyphic-latin-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/inter-latin-ext-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("/fonts/inter-latin-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Base UI state attributes, styled directly (never a data-slot marker). */
+@custom-variant data-open {
+  &:where([data-state="open"]),
+  &:where([data-open]:not([data-open="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-closed {
+  &:where([data-state="closed"]),
+  &:where([data-closed]:not([data-closed="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-disabled {
+  &:where([data-disabled="true"]),
+  &:where([data-disabled]:not([data-disabled="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-pressed {
+  &:where([data-pressed]) {
+    @slot;
+  }
+}
+@custom-variant data-highlighted {
+  &:where([data-highlighted]) {
+    @slot;
+  }
+}
+@custom-variant data-instant {
+  &:where([data-instant]) {
+    @slot;
+  }
+}
+
+/* Touch hit area: on a coarse pointer an invisible ::before grows the tap
+ * target to 44x44 while the painted box keeps its size. Host is `relative`. */
+@utility touch-hit {
+  @media (pointer: coarse) {
+    &::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100%;
+      height: 100%;
+      min-width: 44px;
+      min-height: 44px;
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+/* Height only, for segments that sit edge to edge. */
+@utility touch-hit-y {
+  @media (pointer: coarse) {
+    &::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      min-height: 44px;
+      transform: translateY(-50%);
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* Display face: Faculty Glyphic, 400 only, tight tracking, never below 28px. */
+@utility font-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+/* Mono microlabel: uppercase via text-transform, 0.06em, 12px. */
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+:root {
+  color-scheme: light;
+
+  /* Ground and surfaces: foreground is always lighter than the ground. */
+  --ground: #f7f8fb;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --band: #000000;
+
+  /* Text */
+  --ink: #101321;
+  --ink-secondary: rgb(16 19 33 / 0.68);
+  --ink-label: #6b7185;
+  --ink-nav: #565c70;
+  --on-dark: #ffffff;
+  --on-dark-secondary: rgb(255 255 255 / 0.86);
+  --on-dark-label: rgb(255 255 255 / 0.6);
+
+  /* Brand and actions: blue is the accent, primary buttons are black. */
+  --accent: #1f40ed;
+  --accent-faint: #e7ebfd;
+  --accent-deep: #0d2189;
+  --accent-tint: rgb(31 64 237 / 0.045);
+  --action: #000000;
+  --action-hover: #1f2937;
+  --on-action: #ffffff;
+  --on-accent: #ffffff;
+  --action-secondary: #e6eaf4;
+  --action-secondary-hover: var(--accent-faint);
+  --focus-ring: rgb(31 64 237 / 0.25);
+
+  /* Lines: dividers only, never the edge of a surface. */
+  --hairline: rgb(16 19 33 / 0.12);
+  --outline-image: rgb(0 0 0 / 0.08);
+  --scrim: rgb(16 19 33 / 0.4);
+  --highlight: var(--ground);
+
+  /* State colours: each clears 4.5:1 as text on white, the ground and its 10% tint. */
+  --success: var(--color-emerald-800);
+  --info: var(--accent);
+  --warning: var(--color-amber-800);
+  --error: var(--color-red-700);
+
+  /* Risk palette (data colours). `fill` paints the map, bars and swatches;
+   * `ink` is the label on the 14% tint (all at least 5.9:1). */
+  --risk-low: #2e9d5b;
+  --risk-moderate: #e0a100;
+  --risk-high: #ef6a00;
+  --risk-severe: #d42c2c;
+  --risk-no-travel: #5b1d8f;
+  --risk-low-ink: #14653a;
+  --risk-moderate-ink: #7a5200;
+  --risk-high-ink: #9a3c00;
+  --risk-severe-ink: #a3191b;
+  --risk-no-travel-ink: #4b1679;
+
+  --shadow-resting-value: 0 0 0 1px rgb(16 19 33 / 0.06), 0 1px 2px rgb(16 19 33 / 0.06),
+    0 2px 6px rgb(16 19 33 / 0.04);
+  --shadow-raised-value: 0 0 0 1px rgb(16 19 33 / 0.06), 0 4px 8px rgb(16 19 33 / 0.06),
+    0 12px 24px -8px rgb(16 19 33 / 0.12);
+  --shadow-lifted-value: 0 0 0 1px rgb(16 19 33 / 0.08), 0 8px 16px rgb(16 19 33 / 0.08),
+    0 32px 64px -16px rgb(16 19 33 / 0.2);
+  --shadow-focus-value: 0 0 0 1px var(--accent), 0 0 0 4px var(--focus-ring);
+
+  /* Motion scale (transitions-dev tokens). Pick by usage. */
+  --duration-micro: 80ms;
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-medium: 350ms;
+  --duration-slow: 400ms;
+  --duration-press: 200ms;
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: ease-in-out;
+}
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  --font-display: "Faculty Glyphic", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  --text-caption: 13px;
+  --text-body-sm: 15px;
+  --text-heading: 17px;
+  --text-heading-lg: 22px;
+
+  --animate-spinner-clock: spinner-clock 900ms linear infinite;
+
+  /* Radii 2 / 4 / 8; Tailwind's names map onto the three steps. */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-full: 9999px;
+  --radius-tile: 2px;
+  --radius-control: 4px;
+  --radius-panel: 8px;
+
+  --shadow-resting: var(--shadow-resting-value);
+  --shadow-raised: var(--shadow-raised-value);
+  --shadow-lifted: var(--shadow-lifted-value);
+  --shadow-focus: var(--shadow-focus-value);
+
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-band: var(--band);
+  --color-ink: var(--ink);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-label: var(--ink-label);
+  --color-ink-nav: var(--ink-nav);
+  --color-on-dark: var(--on-dark);
+  --color-on-dark-secondary: var(--on-dark-secondary);
+  --color-on-dark-label: var(--on-dark-label);
+  --color-accent: var(--accent);
+  --color-accent-faint: var(--accent-faint);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-tint: var(--accent-tint);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-on-action: var(--on-action);
+  --color-on-accent: var(--on-accent);
+  --color-action-secondary: var(--action-secondary);
+  --color-action-secondary-hover: var(--action-secondary-hover);
+  --color-hairline: var(--hairline);
+  --color-outline-image: var(--outline-image);
+  --color-scrim: var(--scrim);
+  --color-highlight: var(--highlight);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  --color-risk-low: var(--risk-low);
+  --color-risk-moderate: var(--risk-moderate);
+  --color-risk-high: var(--risk-high);
+  --color-risk-severe: var(--risk-severe);
+  --color-risk-no-travel: var(--risk-no-travel);
+}
+
+@keyframes spinner-clock {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-hairline, currentColor);
+  }
+
+  html {
+    @apply font-sans;
+    font-optical-sizing: auto;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-ground text-ink-secondary;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply text-ink;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  a {
+    text-underline-position: from-font;
+    text-decoration-skip-ink: auto;
+  }
+
+  table,
+  [data-tabular] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* iOS Safari zooms on focus of any field under 16px. WebKit on iOS only;
+ * unlayered so it outranks the text-sm utilities. */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* ── MapLibre chrome on the design system ───────────────────────────────── */
+
+.maplibregl-map {
+  font: inherit;
+}
+/* Popups open above the A/B/C route labels and the truck marker (both DOM markers). */
+.maplibregl-popup {
+  z-index: 5;
+}
+.maplibregl-popup-content {
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-raised-value);
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+.maplibregl-popup-close-button {
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  color: var(--ink-label);
+  border-radius: var(--radius-control);
+}
+.maplibregl-popup-close-button:hover {
+  background: var(--ground);
+  color: var(--ink);
+}
+.maplibregl-popup-close-button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-value);
+}
+.maplibregl-ctrl-group {
+  border-radius: var(--radius-control) !important;
+  box-shadow: var(--shadow-resting-value) !important;
+}
+.maplibregl-ctrl-group button:focus-visible {
+  box-shadow: var(--shadow-focus-value);
+}
+.maplibregl-ctrl-attrib {
+  font-size: 12px;
+}
+
+/* Long checkpoint lists stay cheap: off-screen rows skip layout and paint. */
+.cv-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}

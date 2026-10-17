@@ -1,0 +1,28 @@
+{
+  "name": "spotter-ai",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.0",
+  "scripts": {
+    "dev": "pnpm run \"/^dev:(backend|frontend)$/\"",
+    "dev:backend": "cd backend && uv run uvicorn config.asgi:application --reload --port 8000",
+    "dev:frontend": "pnpm --dir frontend dev",
+    "build": "pnpm --dir frontend build && cp worker/_headers frontend/dist/_headers",
+    "deploy": "pnpm build && wrangler deploy",
+    "deploy:dry": "pnpm build && wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "cf:typegen": "wrangler types worker/worker-configuration.d.ts",
+    "cf:tail": "wrangler tail",
+    "typecheck": "tsc -p worker/tsconfig.json"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "0.3.7",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.151.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  }
+}

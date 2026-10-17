@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // One Worker, one origin:
+  //   /api/*      -> Worker -> Django container (Cloudflare Containers)
+  //   everything  -> static React build (Workers Static Assets, SPA fallback)
+  "name": "spotter-ai",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-09-29",
+  "upload_source_maps": true,
+  "observability": { "enabled": true },
+
+  "assets": {
+    "directory": "./frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Only /api/* invokes the Worker; asset requests are served directly (free, no Worker CPU).
+    "run_worker_first": ["/api/*"]
+  },
+
+  "containers": [
+    {
+      "class_name": "Backend",
+      // Built and pushed by `wrangler deploy` (needs a running Docker daemon). Build context = ./backend
+      "image": "./backend/Dockerfile",
+      // 1/4 vCPU, 1 GiB RAM, 4 GB disk. Django + uvicorn fits comfortably.
+      "instance_type": "basic",
+      // The Worker only ever addresses one named instance ("main"); 2 leaves headroom during rollouts.
+      "max_instances": 2
+    }
+  ],
+
+  "durable_objects": {
+    "bindings": [{ "name": "BACKEND", "class_name": "Backend" }]
+  },
+
+  // Current docs declare container Durable Object classes via `exports` (SQLite storage).
+  // The legacy equivalent is: "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Backend"] }]
+  // (exports and migrations must not be combined).
+  "exports": {
+    "Backend": { "type": "durable-object", "storage": "sqlite" }
+  }
+
+  // Secrets (not in this file): `wrangler secret put DJANGO_SECRET_KEY`, `wrangler secret put ORS_API_KEY`
+}
