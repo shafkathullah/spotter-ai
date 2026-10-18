@@ -12,7 +12,7 @@
 
 ## 0:40 to 2:00, entering a trip
 - Type origin and destination: autocomplete goes through Django to Photon, and the Swap button swaps them.
-- Departure in local time. Load presets, and the hint that explains the load rules.
+- Departure in local time. Load presets (the dropdown on the Load field), and the ⓘ tooltip that explains the load rules.
 - Interval toggle: 10, 25 or 50 mi.
 - Submit. Mention the cold timing (about 3-8 s, mostly routing plus weather) and that a repeat search is cached.
 

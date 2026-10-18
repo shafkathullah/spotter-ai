@@ -1,5 +1,6 @@
 import IconArrowPath from "~icons/heroicons/arrow-path";
 import IconArrowsUpDown from "~icons/heroicons/arrows-up-down";
+import IconCheck from "~icons/heroicons/check";
 import IconCheckCircle from "~icons/heroicons/check-circle";
 import IconChevronDown from "~icons/heroicons/chevron-down";
 import IconClock from "~icons/heroicons/clock";
@@ -25,6 +26,7 @@ import { cn } from "@/lib/utils";
  * above and naming it in ICONS.
  */
 const ICONS = {
+  check: IconCheck,
   check_circle: IconCheckCircle,
   clock: IconClock,
   close: IconXMark,

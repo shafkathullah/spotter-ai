@@ -396,6 +396,15 @@
 .maplibregl-ctrl-attrib {
   font-size: 12px;
 }
+/* From md up the map is full-bleed under floating panels; controls keep the panels' 16px edge gap. */
+@media (min-width: 48rem) {
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+    margin: 0 16px 16px 0;
+  }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
+    margin-bottom: 16px;
+  }
+}
 
 /* Long checkpoint lists stay cheap: off-screen rows skip layout and paint. */
 .cv-row {

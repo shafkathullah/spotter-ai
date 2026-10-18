@@ -51,7 +51,8 @@ export function MapView({ onReady, children, className }: MapViewProps) {
           touchPitch: false,
         });
         map.touchZoomRotate.disableRotation();
-        map.addControl(new ml.NavigationControl({ showCompass: false }), "top-right");
+        // Bottom-right: from md up the trip bar floats over the top of the map.
+        map.addControl(new ml.NavigationControl({ showCompass: false }), "bottom-right");
 
         const onLoad = () => {
           setupLayers(map);

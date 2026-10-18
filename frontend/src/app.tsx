@@ -14,6 +14,7 @@ import { ResultsEmpty, ResultsError, ResultsPanel, ResultsSkeleton } from "@/com
 import { useHeatmap, useRoutes } from "@/hooks/use-api";
 import { checkpointStore } from "@/lib/checkpoint-store";
 import { DEV_INITIAL_FORM } from "@/dev/initial-form";
+import { cn } from "@/lib/utils";
 
 export function App() {
   const [request, setRequest] = useState<RoutesRequest | null>(null);
@@ -87,10 +88,24 @@ export function App() {
     />
   ) : null;
 
+  const brand = (
+    <div className="flex flex-col gap-1.5">
+      <p className="label-mono text-ink-label">Spotter</p>
+      <h1 className="font-display text-[28px] leading-[1.06]">Route weather</h1>
+      <p className="text-sm leading-normal text-ink-secondary">
+        Three truck routes, weather checked at the hour you reach each point, ranked for safety then time.
+      </p>
+    </div>
+  );
+
   return (
     <MapContext.Provider value={mapHandle}>
       <Tooltip.Provider delay={400}>
-        <div className="flex min-h-dvh flex-col md:h-dvh md:flex-row md:overflow-hidden">
+        {/* Phones: one column (trip form, map, forecast card, results) that scrolls as a page.
+            From md up the map is full-bleed and the trip bar, results panel and forecast card
+            float over it as separate cards, 16px from the window edges and from each other.
+            The wrappers are `display: contents` on phones so their children join the column. */}
+        <div className="relative flex min-h-dvh flex-col md:block md:h-dvh md:overflow-hidden">
           <a
             href="#trip"
             className="sr-only z-50 rounded-md bg-action px-3 py-2 text-sm font-semibold text-on-action focus:not-sr-only focus:absolute focus:top-3 focus:left-3"
@@ -98,68 +113,78 @@ export function App() {
             Skip to trip details
           </a>
 
-          <main className="relative order-1 flex shrink-0 flex-col md:order-2 md:min-h-0 md:flex-1">
-            <div className="relative h-[55dvh] min-h-[320px] md:h-auto md:min-h-0 md:flex-1">
-              <MapView onReady={setMapHandle} className="absolute inset-0 bg-ground" />
-            </div>
-            {heatPanel ? (
-              <div className="px-4 pt-4 md:pointer-events-none md:absolute md:inset-x-3 md:bottom-8 md:flex md:justify-center md:p-0">
-                <div className="w-full md:max-w-[600px]">{heatPanel}</div>
-              </div>
-            ) : null}
+          <main className="relative order-2 h-[55dvh] md:order-none min-h-[320px] md:absolute md:inset-0 md:h-auto md:min-h-0">
+            <MapView onReady={setMapHandle} className="absolute inset-0 bg-ground" />
             <RouteLayers data={data} selection={selection} onSelect={selectFromMap} />
           </main>
 
-          {/* From md up the sidebar is a bounded panel, so it scrolls in a Base UI ScrollArea
-              (overlay scrollbar, edge fades). On phones the area is unbounded and the page scrolls. */}
-          <aside
-            id="trip"
-            className="order-2 flex flex-col bg-ground md:order-1 md:min-h-0 md:w-[400px] md:shrink-0 md:shadow-[1px_0_0_var(--hairline)]"
-          >
-            <ScrollArea.Default
-              className="md:flex-1"
-              fade="y"
-              aria-label="Trip details and routes"
-              contentClassName="flex min-h-full flex-col gap-5 px-4 pt-5 pb-10 md:px-5 md:pt-6"
+          <div className="contents md:pointer-events-none md:absolute md:inset-0 md:z-10 md:flex md:flex-col md:gap-4 md:p-4">
+            <header
+              id="trip"
+              data-map-inset="top"
+              className="relative z-10 order-1 flex shrink-0 md:order-none flex-col gap-4 bg-surface px-4 pt-5 pb-4 shadow-[0_1px_0_var(--hairline)] md:pointer-events-auto md:rounded-panel md:px-4 md:pt-2.5 md:pb-3.5 md:shadow-raised"
             >
-              <header className="flex flex-col gap-2">
-                <p className="label-mono text-ink-label">Spotter</p>
-                <h1 className="font-display text-[32px] leading-[1.06]">Route weather</h1>
-                <p className="text-[15px] leading-normal text-ink-secondary">
-                  Three truck routes, weather checked at the hour you reach each point, ranked for safety then time.
-                </p>
-              </header>
+              <div className="md:hidden">{brand}</div>
+              <TripForm
+                initial={initial?.values}
+                pending={routes.isFetching}
+                departure={request?.departure}
+                onSubmit={submitTrip}
+              />
+            </header>
 
-              <div className="rounded-panel bg-surface p-4 shadow-resting">
-                <TripForm
-                  initial={initial?.values}
-                  pending={routes.isFetching}
-                  departure={request?.departure}
-                  onSubmit={submitTrip}
-                />
-              </div>
+            <div className="contents md:flex md:min-h-0 md:flex-1 md:items-start md:gap-4">
+              {/* The panel hugs its content and scrolls in a Base UI ScrollArea once it reaches the
+                  bottom gap. Before the first search it is only a small intro card (title and
+                  tagline) from md up. On phones it is unbounded and the page scrolls. */}
+              <aside
+                data-map-inset="left"
+                className="order-4 flex flex-col bg-ground md:order-none md:pointer-events-auto md:max-h-full md:w-[400px] md:shrink-0 md:overflow-hidden md:rounded-panel md:shadow-raised"
+              >
+                <ScrollArea.Default
+                  className="md:min-h-0"
+                  fade="y"
+                  aria-label="Recommendation and routes"
+                  contentClassName="flex flex-col gap-5 px-4 pt-5 pb-10 md:pb-5"
+                >
+                  <div className="hidden md:block">{brand}</div>
 
-              <div aria-live="polite" aria-busy={routes.isFetching} className="flex flex-col gap-4">
-                {request === null ? (
-                  <ResultsEmpty />
-                ) : routes.isPending ? (
-                  <ResultsSkeleton />
-                ) : routes.isError ? (
-                  <ResultsError error={routes.error} onRetry={() => void routes.refetch()} />
-                ) : data ? (
-                  <div className={routes.isPlaceholderData ? "opacity-60 transition-opacity" : undefined}>
-                    <ResultsPanel data={data} selectedId={selection?.id ?? null} onSelect={selectFromCard} />
+                  <div
+                    aria-live="polite"
+                    aria-busy={routes.isFetching}
+                    className={cn("flex flex-col gap-4", request === null && "md:hidden")}
+                  >
+                    {request === null ? (
+                      <ResultsEmpty />
+                    ) : routes.isPending ? (
+                      <ResultsSkeleton />
+                    ) : routes.isError ? (
+                      <ResultsError error={routes.error} onRetry={() => void routes.refetch()} />
+                    ) : data ? (
+                      <div className={routes.isPlaceholderData ? "opacity-60 transition-opacity" : undefined}>
+                        <ResultsPanel data={data} selectedId={selection?.id ?? null} onSelect={selectFromCard} />
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
 
-              <footer className="mt-auto pt-2 text-xs text-ink-label">
-                Weather from Open-Meteo. Routing from {provider === "ors" ? "OpenRouteService (heavy goods profile)" : "OSRM"}.
-                Map data from OpenStreetMap via OpenFreeMap.
-                {FIXTURE_MODE ? " Showing the bundled sample trip (dev fixture)." : ""}
-              </footer>
-            </ScrollArea.Default>
-          </aside>
+                  <footer className={cn("pt-2 text-xs text-ink-label", request === null && "md:hidden")}>
+                    Weather from Open-Meteo. Routing from{" "}
+                    {provider === "ors" ? "OpenRouteService (heavy goods profile)" : "OSRM"}. Map data from
+                    OpenStreetMap via OpenFreeMap.
+                    {FIXTURE_MODE ? " Showing the bundled sample trip (dev fixture)." : ""}
+                  </footer>
+                </ScrollArea.Default>
+              </aside>
+
+              {heatPanel ? (
+                <div className="order-3 px-4 pt-4 md:order-none md:flex md:min-w-0 md:flex-1 md:flex-col md:items-center md:self-stretch md:justify-end md:p-0">
+                  <div data-map-inset="bottom" className="w-full md:max-w-[600px]">
+                    {heatPanel}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       </Tooltip.Provider>
     </MapContext.Provider>

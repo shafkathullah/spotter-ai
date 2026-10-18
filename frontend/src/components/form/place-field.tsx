@@ -7,6 +7,7 @@ import { useGeocode } from "@/hooks/use-api";
 import * as Combobox from "@/components/primitives/combobox";
 import { Spinner } from "@/components/spinner";
 import { Icon } from "@/components/icon";
+import { cn } from "@/lib/utils";
 import { FieldError } from "./field-error";
 
 const placeKey = (p: Place) => `${p.label}|${p.lat.toFixed(5)}|${p.lon.toFixed(5)}`;
@@ -20,6 +21,8 @@ interface PlaceFieldProps {
   inputRef?: React.Ref<HTMLInputElement>;
   /** Rendered at the right end of the label row (the swap button). */
   labelAction?: React.ReactNode;
+  /** Grid placement in the trip bar. */
+  className?: string;
 }
 
 /**
@@ -27,7 +30,16 @@ interface PlaceFieldProps {
  * debounced 250 ms. Only typing searches (not picking an item), and the
  * stale request is aborted when the text changes (see `useGeocode`).
  */
-export function PlaceField({ label, placeholder, value, onChange, error, inputRef, labelAction }: PlaceFieldProps) {
+export function PlaceField({
+  label,
+  placeholder,
+  value,
+  onChange,
+  error,
+  inputRef,
+  labelAction,
+  className,
+}: PlaceFieldProps) {
   const id = useId();
   const errorId = `${id}-error`;
   const [inputValue, setInputValue] = useState(value?.label ?? "");
@@ -62,8 +74,8 @@ export function PlaceField({ label, placeholder, value, onChange, error, inputRe
   else if (typing && results.length === 0 && geo.isSuccess) status = `No places match “${search.trim()}”.`;
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex min-h-7 items-end justify-between gap-2">
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <div className="flex h-7 items-end justify-between gap-2">
         <label htmlFor={id} className="text-[13px] font-medium text-ink">
           {label}
         </label>

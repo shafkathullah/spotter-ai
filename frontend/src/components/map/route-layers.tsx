@@ -23,13 +23,28 @@ interface RouteLayersProps {
 
 /**
  * Map padding that keeps routes clear of the controls and, from md up, of the
- * floating heatmap card (on phones that card sits under the map instead).
+ * panels floating over the map. Each panel marks the edge it covers with
+ * `data-map-inset="top" | "left" | "bottom"`; the padding is measured from
+ * them, so it follows the trip bar wrapping to two rows or the heatmap card
+ * loading. On phones the panels sit outside the map and none overlap it.
  */
 export function fitPadding(container: HTMLElement) {
   const narrow = container.clientWidth < 640;
-  return narrow
-    ? { top: 48, bottom: 48, left: 28, right: 28 }
-    : { top: 64, bottom: 270, left: 64, right: 72 };
+  // Wide: the bottom default leaves room for the forecast card, which mounts after the first fit.
+  const pad = narrow ? { top: 48, bottom: 48, left: 28, right: 28 } : { top: 48, bottom: 240, left: 48, right: 72 };
+  if (narrow) return pad;
+  const box = container.getBoundingClientRect();
+  const GAP = 32;
+  for (const el of document.querySelectorAll<HTMLElement>("[data-map-inset]")) {
+    const r = el.getBoundingClientRect();
+    // Only panels drawn over the map count (phones stack them outside it).
+    if (r.width === 0 || r.bottom <= box.top || r.top >= box.bottom || r.right <= box.left || r.left >= box.right) continue;
+    const side = el.dataset.mapInset;
+    if (side === "top") pad.top = Math.max(pad.top, r.bottom - box.top + GAP);
+    else if (side === "left") pad.left = Math.max(pad.left, r.right - box.left + GAP);
+    else if (side === "bottom") pad.bottom = Math.max(pad.bottom, box.bottom - r.top + GAP);
+  }
+  return pad;
 }
 
 const LABEL_AT: readonly number[] = [0.42, 0.55, 0.68];
@@ -217,7 +232,8 @@ export function RouteLayers({ data, selection, onSelect }: RouteLayersProps) {
       if (narrow || !map.getBounds().contains([cp.lon, cp.lat])) {
         map.easeTo({
           center: [cp.lon, cp.lat],
-          offset: narrow ? [0, Math.round(box.clientHeight * 0.3)] : [0, 0],
+          // From md up, centre it in the part of the map the floating panels leave clear.
+          ...(narrow ? { offset: [0, Math.round(box.clientHeight * 0.3)] as [number, number] } : { padding: fitPadding(box) }),
           duration: 500,
         });
       }
