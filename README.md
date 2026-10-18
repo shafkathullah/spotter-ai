@@ -2,7 +2,7 @@
 
 A React + Django app that helps a truck driver pick the safest of three routes. You enter an origin, a destination, a departure time and a load weight. The app gets three routes and places checkpoints every 10, 25 or 50 miles along each. It reads the forecast at the time the truck will reach each checkpoint, scores the weather risk with the load rules, and recommends a route: fewest No Travel miles first, then Severe miles, High miles, average risk and travel time. A map shows every route, checkpoint, risk level and ETA, plus a 0-48 hour weather heatmap of the trip corridor with a time slider.
 
-**Live:** https://spotter-ai.shafu.workers.dev
+**Live:** https://spotter.shafu.xyz (also https://spotter-ai.shafu.workers.dev)
 
 ![Desktop: three routes, the recommended route coloured by risk, and the corridor forecast](docs/screenshots/desktop-results.png)
 

@@ -6,6 +6,9 @@
   "name": "spotter-ai",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-09-29",
+  // Custom domain: wrangler creates the DNS record and certificate. workers.dev stays on too.
+  "routes": [{ "pattern": "spotter.shafu.xyz", "custom_domain": true }],
+  "workers_dev": true,
   "upload_source_maps": true,
   "observability": { "enabled": true },
 

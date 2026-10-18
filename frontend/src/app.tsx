@@ -8,8 +8,14 @@ import { HeatmapPanel } from "@/components/map/heatmap-panel";
 import { type MapHandle, MapContext } from "@/components/map/map-context";
 import { MapView } from "@/components/map/map-view";
 import { RouteLayers, type Selection } from "@/components/map/route-layers";
+import * as ScrollArea from "@/components/primitives/scroll-area";
 import * as Tooltip from "@/components/primitives/tooltip";
-import { ResultsEmpty, ResultsError, ResultsPanel, ResultsSkeleton } from "@/components/results/results-panel";
+import {
+  ResultsEmpty,
+  ResultsError,
+  ResultsPanel,
+  ResultsSkeleton,
+} from "@/components/results/results-panel";
 import { useHeatmap, useRoutes } from "@/hooks/use-api";
 import { checkpointStore } from "@/lib/checkpoint-store";
 import { DEV_INITIAL_FORM } from "@/dev/initial-form";
@@ -33,7 +39,9 @@ export function App() {
   useEffect(() => {
     checkpointStore.setHovered(null);
     checkpointStore.setPicked(null);
-    setSelection(routes.data ? { id: routes.data.recommended_route_id, fit: false } : null);
+    setSelection(
+      routes.data ? { id: routes.data.recommended_route_id, fit: false } : null,
+    );
   }, [routes.data]);
 
   const selectFromCard = useCallback((id: string) => {
@@ -46,7 +54,9 @@ export function App() {
   }, []);
 
   // Dev fixture mode plans the sample trip straight away.
-  const [initial] = useState(() => (FIXTURE_MODE ? DEV_INITIAL_FORM() : undefined));
+  const [initial] = useState(() =>
+    FIXTURE_MODE ? DEV_INITIAL_FORM() : undefined,
+  );
   useEffect(() => {
     if (FIXTURE_MODE && initial?.request) setRequest(initial.request);
   }, [initial]);
@@ -83,49 +93,88 @@ export function App() {
 
           <main className="relative order-1 flex shrink-0 flex-col md:order-2 md:min-h-0 md:flex-1">
             <div className="relative h-[55dvh] min-h-[320px] md:h-auto md:min-h-0 md:flex-1">
-              <MapView onReady={setMapHandle} className="absolute inset-0 bg-ground" />
+              <MapView
+                onReady={setMapHandle}
+                className="absolute inset-0 bg-ground"
+              />
             </div>
             {heatPanel ? (
               <div className="px-4 pt-4 md:pointer-events-none md:absolute md:inset-x-3 md:bottom-8 md:flex md:justify-center md:p-0">
                 <div className="w-full md:max-w-[600px]">{heatPanel}</div>
               </div>
             ) : null}
-            <RouteLayers data={data} selection={selection} onSelect={selectFromMap} />
+            <RouteLayers
+              data={data}
+              selection={selection}
+              onSelect={selectFromMap}
+            />
           </main>
 
+          {/* From md up the sidebar is a bounded panel, so it scrolls in a Base UI ScrollArea
+              (overlay scrollbar, edge fades). On phones the area is unbounded and the page scrolls. */}
           <aside
             id="trip"
-            className="order-2 flex flex-col gap-5 bg-ground px-4 pt-5 pb-10 md:order-1 md:w-[400px] md:shrink-0 md:overflow-y-auto md:overscroll-contain md:px-5 md:pt-6 md:shadow-[1px_0_0_var(--hairline)]"
+            className="order-2 flex flex-col bg-ground md:order-1 md:min-h-0 md:w-[400px] md:shrink-0 md:shadow-[1px_0_0_var(--hairline)]"
           >
-            <header className="flex flex-col gap-2">
-              <p className="label-mono text-ink-label">Spotter</p>
-              <h1 className="font-display text-[32px] leading-[1.06]">Route weather</h1>
-              <p className="text-[15px] leading-normal text-ink-secondary">
-                Three truck routes, weather checked at the hour you reach each point, ranked for safety then time.
-              </p>
-            </header>
+            <ScrollArea.Default
+              className="md:flex-1"
+              fade="y"
+              aria-label="Trip details and routes"
+              contentClassName="flex min-h-full flex-col gap-5 px-4 pt-5 pb-10 md:px-5 md:pt-6"
+            >
+              <header className="flex flex-col gap-2">
+                <p className="label-mono text-ink-label">Spotter</p>
+                <h1 className="font-display text-[32px] leading-[1.06]">
+                  Route weather
+                </h1>
+                <p className="text-[15px] leading-normal text-ink-secondary">
+                  Three truck routes, weather checked at the hour you reach each
+                  point, ranked for safety then time.
+                </p>
+              </header>
 
-            <div className="rounded-panel bg-surface p-4 shadow-resting">
-              <TripForm initial={initial?.values} pending={routes.isFetching} onSubmit={setRequest} />
-            </div>
+              <div className="rounded-panel bg-surface p-4 shadow-resting">
+                <TripForm
+                  initial={initial?.values}
+                  pending={routes.isFetching}
+                  onSubmit={setRequest}
+                />
+              </div>
 
-            <div aria-live="polite" aria-busy={routes.isFetching} className="flex flex-col gap-4">
-              {request === null ? (
-                <ResultsEmpty />
-              ) : routes.isPending ? (
-                <ResultsSkeleton />
-              ) : routes.isError ? (
-                <ResultsError error={routes.error} onRetry={() => void routes.refetch()} />
-              ) : data ? (
-                <ResultsPanel data={data} selectedId={selection?.id ?? null} onSelect={selectFromCard} />
-              ) : null}
-            </div>
+              <div
+                aria-live="polite"
+                aria-busy={routes.isFetching}
+                className="flex flex-col gap-4"
+              >
+                {request === null ? (
+                  <ResultsEmpty />
+                ) : routes.isPending ? (
+                  <ResultsSkeleton />
+                ) : routes.isError ? (
+                  <ResultsError
+                    error={routes.error}
+                    onRetry={() => void routes.refetch()}
+                  />
+                ) : data ? (
+                  <ResultsPanel
+                    data={data}
+                    selectedId={selection?.id ?? null}
+                    onSelect={selectFromCard}
+                  />
+                ) : null}
+              </div>
 
-            <footer className="mt-auto pt-2 text-xs text-ink-label">
-              Weather from Open-Meteo. Routing from {provider === "ors" ? "OpenRouteService (heavy goods profile)" : "OSRM"}.
-              Map data from OpenStreetMap via OpenFreeMap.
-              {FIXTURE_MODE ? " Showing the bundled sample trip (dev fixture)." : ""}
-            </footer>
+              <footer className="mt-auto pt-2 text-xs text-ink-label">
+                Weather from Open-Meteo. Routing from{" "}
+                {provider === "ors"
+                  ? "OpenRouteService (heavy goods profile)"
+                  : "OSRM"}
+                . Map data from OpenStreetMap via OpenFreeMap.
+                {FIXTURE_MODE
+                  ? " Showing the bundled sample trip (dev fixture)."
+                  : ""}
+              </footer>
+            </ScrollArea.Default>
           </aside>
         </div>
       </Tooltip.Provider>
