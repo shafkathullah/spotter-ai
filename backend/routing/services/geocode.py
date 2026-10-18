@@ -13,8 +13,9 @@ from .http import UpstreamError, describe_http_error
 CACHE_TTL_S = 24 * 60 * 60
 MIN_QUERY_LEN = 3
 # lon_min, lat_min, lon_max, lat_max: continental US, Alaska, Canada, northern Mexico.
+# No lat/lon bias: with Photon's default zoom, biasing to the US centre (Kansas) ranked nearby
+# partial matches ("Cawker City, Kansas") above Kansas City, MO. The bbox alone keeps results local.
 NA_BBOX = "-170,14,-50,72"
-BIAS_LAT, BIAS_LON = 39.8, -98.6  # geographic centre of the contiguous US
 
 
 def _label(props: dict) -> str:
@@ -61,8 +62,6 @@ async def geocode(client: httpx.AsyncClient, q: str, limit: int) -> list[dict]:
         "q": q,
         "limit": min(limit * 2, 20),  # over-fetch: duplicates labels are collapsed
         "lang": "en",
-        "lat": BIAS_LAT,
-        "lon": BIAS_LON,
         "bbox": NA_BBOX,
     }
     try:
