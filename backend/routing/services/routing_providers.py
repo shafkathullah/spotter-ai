@@ -12,6 +12,7 @@ Strategy for exactly three distinct candidates:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import math
 import re
@@ -23,7 +24,15 @@ import httpx
 from django.conf import settings
 from django.core.cache import cache
 
-from .geo import EARTH_RADIUS_KM, METERS_PER_MILE, LonLat, ProjectedPolyline, overlap_fraction, simplify_to_max
+from .geo import (
+    EARTH_RADIUS_KM,
+    METERS_PER_MILE,
+    LonLat,
+    ProjectedPolyline,
+    haversine_km,
+    overlap_fraction,
+    simplify_to_max,
+)
 from .http import InputError, UpstreamError, describe_http_error
 from .sampling import Track, cum_seconds_from_segments, cum_seconds_from_steps, scaled_cumulative_miles
 
@@ -38,6 +47,11 @@ MAX_DURATION_RATIO = 1.6
 OVERLAP_MAX_POINTS = 400
 ROUTE_CACHE_TTL_S = 15 * 60
 TARGET_ROUTES = 3
+ORS_DOWN_KEY = "ors:down"
+ORS_DOWN_TTL_S = 5 * 60
+ORS_BUDGET_S = 10
+# Public ORS rejects alternative_routes above ~100 km (error 2004); skip the doomed request.
+ORS_ALTERNATIVES_MAX_KM = 90
 
 
 @dataclass
@@ -223,7 +237,11 @@ async def _ors_post(client: httpx.AsyncClient, body: dict) -> httpx.Response:
     url = f"{settings.ORS_BASE_URL}/v2/directions/driving-hgv/geojson"
     headers = {"Authorization": settings.ORS_API_KEY, "Accept": "application/geo+json, application/json"}
     try:
-        return await client.post(url, json=body, headers=headers)
+        return await client.post(url, json=body, headers=headers, timeout=settings.ORS_TIMEOUT_S)
+    except httpx.TimeoutException as exc:
+        raise UpstreamError(
+            f"Routing failed: OpenRouteService did not respond within {settings.ORS_TIMEOUT_S:g} s"
+        ) from exc
     except httpx.HTTPError as exc:
         raise UpstreamError(f"Routing failed: {describe_http_error('OpenRouteService', exc)}") from exc
 
@@ -241,7 +259,7 @@ async def ors_routes(
             "profile_params": {"restrictions": {"weight": round(load_lb / LB_PER_TONNE, 2)}},
         },
     }
-    if alternatives:
+    if alternatives and haversine_km(points[0], points[-1]) <= ORS_ALTERNATIVES_MAX_KM:
         body["alternative_routes"] = {"target_count": 3, "share_factor": 0.6, "weight_factor": 1.6}
     resp = await _ors_post(client, body)
     if alternatives and 400 <= resp.status_code < 500 and resp.status_code not in (401, 403, 429):
@@ -336,9 +354,52 @@ async def _safe(coro) -> list[RawRoute]:
 
 async def find_routes(
     client: httpx.AsyncClient, origin: LonLat, dest: LonLat, load_lb: float
+) -> tuple[list[RawRoute], list[str], str]:
+    """Up to three distinct routes ordered by duration, warnings, and the provider that served them.
+
+    With ORS configured, ORS and OSRM run concurrently and ORS gets ORS_BUDGET_S overall: the public
+    ORS API intermittently hangs, and racing keeps the worst case near the budget instead of
+    ORS timeout + OSRM. ORS wins when it returns at least as many routes as OSRM. An ORS upstream
+    failure or blown budget also skips ORS for ORS_DOWN_TTL_S so later requests go straight to OSRM.
+    """
+    if provider_name() == "osrm":
+        routes, warnings = await _find_routes_with("osrm", client, origin, dest, load_lb)
+        return routes, warnings, "osrm"
+
+    osrm_task = asyncio.create_task(_find_routes_with("osrm", client, origin, dest, load_lb))
+    ors_result = None
+    if not await cache.aget(ORS_DOWN_KEY):
+        try:
+            ors_result = await asyncio.wait_for(_find_routes_with("ors", client, origin, dest, load_lb), ORS_BUDGET_S)
+        except (UpstreamError, TimeoutError) as exc:
+            log.warning("ORS unavailable, using OSRM: %r", exc)
+            await cache.aset(ORS_DOWN_KEY, True, ORS_DOWN_TTL_S)
+        except InputError as exc:
+            log.info("ORS found no truck route, trying OSRM: %s", exc)
+
+    if ors_result and len(ors_result[0]) >= TARGET_ROUTES:
+        osrm_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, UpstreamError, InputError):
+            await osrm_task
+        return ors_result[0], ors_result[1], "ors"
+    try:
+        osrm_result = await osrm_task
+    except (UpstreamError, InputError):
+        if ors_result:
+            return ors_result[0], ors_result[1], "ors"
+        raise
+    if ors_result and len(ors_result[0]) >= len(osrm_result[0]):
+        return ors_result[0], ors_result[1], "ors"
+    warning = (
+        "OpenRouteService truck routing is unavailable right now; showing OSRM car routes "
+        "(no truck restrictions, car travel times)."
+    )
+    return osrm_result[0], [warning, *osrm_result[1]], "osrm"
+
+
+async def _find_routes_with(
+    provider: str, client: httpx.AsyncClient, origin: LonLat, dest: LonLat, load_lb: float
 ) -> tuple[list[RawRoute], list[str]]:
-    """Up to three distinct routes, ordered by duration, plus warnings."""
-    provider = provider_name()
     key = f"routes:{provider}:{origin[0]:.5f},{origin[1]:.5f}:{dest[0]:.5f},{dest[1]:.5f}"
     if provider == "ors":
         key += f":{int(load_lb)}"

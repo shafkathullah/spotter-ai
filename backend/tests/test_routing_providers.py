@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -179,7 +180,7 @@ async def test_find_routes_fills_with_detours_and_orders_by_duration():
     respx.get(url__startswith=OSRM).mock(side_effect=handler)
     with override_settings(ORS_API_KEY=""):
         async with httpx.AsyncClient() as client:
-            routes, warnings = await find_routes(client, ORIGIN, DEST, 42000)
+            routes, warnings, _ = await find_routes(client, ORIGIN, DEST, 42000)
     assert [r.duration_s for r in routes] == [3600, 4000, 4200]
     assert warnings == []
     assert sorted(seen) == [2, 3, 3]  # far detours not needed
@@ -194,7 +195,7 @@ async def test_find_routes_second_phase_and_warning():
     respx.get(url__startswith=OSRM).mock(side_effect=handler)
     with override_settings(ORS_API_KEY=""):
         async with httpx.AsyncClient() as client:
-            routes, warnings = await find_routes(client, ORIGIN, DEST, 42000)
+            routes, warnings, _ = await find_routes(client, ORIGIN, DEST, 42000)
             assert len(routes) == 1
             assert warnings and "Only 1 distinct route" in warnings[0]
             assert sorted(seen) == [2, 3, 3, 3, 3]
@@ -216,7 +217,9 @@ def ors_feature(coords, duration, steps):
 
 @respx.mock
 @override_settings(ORS_API_KEY="test-key")
-async def test_ors_body_fallback_and_step_durations():
+async def test_ors_body_fallback_and_step_durations(monkeypatch):
+    # The fixture trip is ~200 km; lift the skip threshold to exercise the 2004 retry path.
+    monkeypatch.setattr("routing.services.routing_providers.ORS_ALTERNATIVES_MAX_KM", 1000)
     n = len(STRAIGHT) - 1
     half = n // 2
     steps = [
@@ -251,6 +254,22 @@ async def test_ors_body_fallback_and_step_durations():
 
 
 @respx.mock
+@override_settings(ORS_API_KEY="test-key")
+async def test_ors_long_trip_skips_alternatives():
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"type": "FeatureCollection", "features": [ors_feature(STRAIGHT, 4000, [])]})
+
+    respx.post(ORS).mock(side_effect=handler)
+    async with httpx.AsyncClient() as client:
+        await ors_routes(client, [ORIGIN, DEST], load_lb=40000, alternatives=True)
+    assert len(bodies) == 1
+    assert "alternative_routes" not in bodies[0]
+
+
+@respx.mock
 @override_settings(ORS_API_KEY="bad")
 async def test_ors_bad_key():
     respx.post(ORS).mock(return_value=httpx.Response(403, json={"error": "Access to this API has been disallowed"}))
@@ -272,3 +291,68 @@ async def test_ors_route_not_found():
 
 def test_description_normalizes_road_name_variants():
     assert describe_routes([["US 287", "US Highway 287", "Interstate 25"]])[0] == "via US 287 / I 25"
+
+
+@respx.mock
+@override_settings(ORS_API_KEY="test-key")
+async def test_ors_failure_falls_back_to_osrm_and_trips_breaker():
+    ors = respx.post(ORS).mock(return_value=httpx.Response(504, text="Gateway Timeout"))
+    handler, _ = _osrm_handler(
+        [osrm_route(STRAIGHT, 3600)],
+        {"Wnear": osrm_route(WEST, 4200), "Enear": osrm_route(EAST, 4000)},
+    )
+    respx.get(url__startswith=OSRM).mock(side_effect=handler)
+    async with httpx.AsyncClient() as client:
+        routes, warnings, provider = await find_routes(client, ORIGIN, DEST, 42000)
+        assert provider == "osrm"
+        assert len(routes) == 3
+        assert "OpenRouteService truck routing is unavailable" in warnings[0]
+        calls = ors.call_count
+        # Breaker open: a different trip skips ORS entirely.
+        _, _, provider = await find_routes(client, ORIGIN, (DEST[0] + 0.01, DEST[1]), 42000)
+        assert provider == "osrm"
+        assert ors.call_count == calls
+
+
+@respx.mock
+@override_settings(ORS_API_KEY="test-key")
+async def test_ors_short_of_three_routes_uses_osrm_set():
+    # ORS primary works but every detour times out -> 1 route; OSRM can supply 3.
+    def ors_handler(request):
+        if len(json.loads(request.content)["coordinates"]) == 3:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json={"type": "FeatureCollection", "features": [ors_feature(STRAIGHT, 3600, [])]})
+
+    respx.post(ORS).mock(side_effect=ors_handler)
+    handler, _ = _osrm_handler(
+        [osrm_route(STRAIGHT, 3600)],
+        {"Wnear": osrm_route(WEST, 4200), "Enear": osrm_route(EAST, 4000)},
+    )
+    respx.get(url__startswith=OSRM).mock(side_effect=handler)
+    async with httpx.AsyncClient() as client:
+        routes, warnings, provider = await find_routes(client, ORIGIN, DEST, 42000)
+    assert provider == "osrm"
+    assert len(routes) == 3
+    assert "OpenRouteService truck routing is unavailable" in warnings[0]
+
+
+@respx.mock
+@override_settings(ORS_API_KEY="test-key")
+async def test_ors_over_budget_uses_osrm(monkeypatch):
+    monkeypatch.setattr("routing.services.routing_providers.ORS_BUDGET_S", 0.05)
+
+    async def slow_ors(request):
+        await asyncio.sleep(1)
+        return httpx.Response(200, json={"type": "FeatureCollection", "features": [ors_feature(STRAIGHT, 3600, [])]})
+
+    respx.post(ORS).mock(side_effect=slow_ors)
+    handler, _ = _osrm_handler(
+        [osrm_route(STRAIGHT, 3600)],
+        {"Wnear": osrm_route(WEST, 4200), "Enear": osrm_route(EAST, 4000)},
+    )
+    respx.get(url__startswith=OSRM).mock(side_effect=handler)
+    async with httpx.AsyncClient() as client:
+        routes, warnings, provider = await asyncio.wait_for(find_routes(client, ORIGIN, DEST, 42000), 0.5)
+    assert provider == "osrm"
+    assert len(routes) == 3
+    assert "unavailable" in warnings[0]

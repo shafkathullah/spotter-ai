@@ -2,7 +2,7 @@
 
 A React + Django app that helps a truck driver pick the safest of three routes. You enter an origin, a destination, a departure time and a load weight. The app gets three routes and places checkpoints every 10, 25 or 50 miles along each. It reads the forecast at the time the truck will reach each checkpoint, scores the weather risk with the load rules, and recommends a route: fewest No Travel miles first, then Severe miles, High miles, average risk and travel time. A map shows every route, checkpoint, risk level and ETA, plus a 0-48 hour weather heatmap of the trip corridor with a time slider.
 
-**Live:** <LIVE_URL>
+**Live:** https://spotter-ai.shafu.workers.dev
 
 ![Desktop: three routes, the recommended route coloured by risk, and the corridor forecast](docs/screenshots/desktop-results.png)
 
@@ -32,7 +32,7 @@ flowchart LR
 ## How the logic works
 
 ### 1. Routes (`routing_providers.py`)
-- With `ORS_API_KEY` set, routes come from OpenRouteService `driving-hgv`, with `vehicle_type: hgv` and the load as `restrictions.weight` in tonnes. Without the key, the keyless OSRM demo server is used, which only has a car profile.
+- With `ORS_API_KEY` set, routes come from OpenRouteService `driving-hgv`, with `vehicle_type: hgv` and the load as `restrictions.weight` in tonnes. Without the key, the keyless OSRM demo server is used, which only has a car profile. The public ORS API is intermittently slow (we measured 2.5 s to 40 s+ for the same request), so ORS and OSRM run concurrently: ORS gets a 10 s overall budget (8 s per call) and wins when it returns at least as many routes as OSRM; otherwise the OSRM routes are shown with a warning. An ORS failure or blown budget skips ORS for 5 minutes. ORS `alternative_routes` is only requested for trips up to 90 km, since the public API rejects it above 100 km.
 - The provider's own alternatives are used first. Missing routes are filled with **detours**:
   - The route is forced through a waypoint at the midpoint of the origin-destination line, offset sideways by ±8% of the straight-line distance, then ±15% if routes are still missing.
   - A candidate is dropped if more than 90% of it lies within 1 km of a route already accepted (checked both ways), or if it takes more than 1.6x the fastest route.

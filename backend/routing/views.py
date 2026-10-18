@@ -76,9 +76,12 @@ async def geocode(request: HttpRequest) -> JsonResponse:
 @api_errors
 async def routes(request: HttpRequest) -> JsonResponse:
     req = RoutesRequest.model_validate(_json_body(request))
+    timings: dict[str, float] = {}
     async with make_client() as client:
-        result = await plan_trip(client, req)
-    return JsonResponse(result)
+        result = await plan_trip(client, req, timings)
+    response = JsonResponse(result)
+    response["Server-Timing"] = ", ".join(f"{k};dur={v:.0f}" for k, v in timings.items())
+    return response
 
 
 @require_POST

@@ -14,7 +14,7 @@ from .geo import haversine_mi, simplify_to_max
 from .http import InputError
 from .recommend import recommend, summarize
 from .risk import assess
-from .routing_providers import describe_routes, find_routes, provider_name
+from .routing_providers import describe_routes, find_routes
 from .sampling import plan_checkpoints
 from .weather import ceil_hour, fetch_hourly, floor_hour, forecast_horizon_end, sample_at, snap_point
 
@@ -72,7 +72,8 @@ def _ends_match(coords, origin, dest) -> bool:
     )
 
 
-async def plan_trip(client: httpx.AsyncClient, req: RoutesRequest) -> dict:
+async def plan_trip(client: httpx.AsyncClient, req: RoutesRequest, timings: dict | None = None) -> dict:
+    """Plan the trip. If `timings` is given, it receives per-stage durations in ms."""
     t0 = time.perf_counter()
     departure = req.departure
     tz = departure.tzinfo
@@ -82,7 +83,7 @@ async def plan_trip(client: httpx.AsyncClient, req: RoutesRequest) -> dict:
     if haversine_mi(origin, dest) < MIN_TRIP_MI:
         raise InputError("origin and destination are the same place")
 
-    raw_routes, warnings = await find_routes(client, origin, dest, req.load_lb)
+    raw_routes, warnings, provider = await find_routes(client, origin, dest, req.load_lb)
     raw_routes = [r for r in raw_routes if _ends_match(r.coords, origin, dest)]
     if not raw_routes:
         raise InputError("no drivable road route connects these places")
@@ -175,11 +176,17 @@ async def plan_trip(client: httpx.AsyncClient, req: RoutesRequest) -> dict:
         t_weather - t_routes,
         time.perf_counter() - t0,
     )
+    if timings is not None:
+        timings.update(
+            routing=(t_routes - t0) * 1000,
+            weather=(t_weather - t_routes) * 1000,
+            total=(time.perf_counter() - t0) * 1000,
+        )
     return {
         "departure": _iso(departure, tz),
         "interval_mi": req.interval_mi,
         "load_lb": req.load_lb,
-        "routing_provider": provider_name(),
+        "routing_provider": provider,
         "recommended_route_id": rec.winner.id,
         "no_safe_route": rec.no_safe_route,
         "explanation": rec.explanation,

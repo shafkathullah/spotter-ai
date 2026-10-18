@@ -59,6 +59,8 @@ OPEN_METEO_BASE_URL = os.environ.get(
 )
 PHOTON_BASE_URL = os.environ.get("PHOTON_BASE_URL", "https://photon.komoot.io")
 UPSTREAM_TIMEOUT_S = float(os.environ.get("UPSTREAM_TIMEOUT_S", "10"))
+# The public ORS API intermittently hangs; fail fast and fall back to OSRM.
+ORS_TIMEOUT_S = float(os.environ.get("ORS_TIMEOUT_S", "8"))
 
 # Open-Meteo free tier counts every location as one call (600/min). These keep
 # one routes+heatmap round trip comfortably under that budget.
