@@ -10,23 +10,32 @@ import { MapView } from "@/components/map/map-view";
 import { RouteLayers, type Selection } from "@/components/map/route-layers";
 import * as ScrollArea from "@/components/primitives/scroll-area";
 import * as Tooltip from "@/components/primitives/tooltip";
-import {
-  ResultsEmpty,
-  ResultsError,
-  ResultsPanel,
-  ResultsSkeleton,
-} from "@/components/results/results-panel";
+import { ResultsEmpty, ResultsError, ResultsPanel, ResultsSkeleton } from "@/components/results/results-panel";
 import { useHeatmap, useRoutes } from "@/hooks/use-api";
 import { checkpointStore } from "@/lib/checkpoint-store";
 import { DEV_INITIAL_FORM } from "@/dev/initial-form";
 
 export function App() {
   const [request, setRequest] = useState<RoutesRequest | null>(null);
+  // The departure typed in the form: the heatmap grid's hour 0. A travel-window
+  // drag moves request.departure but keeps this, and sets `shifted`.
+  const [anchor, setAnchor] = useState<string | undefined>(undefined);
+  const [shifted, setShifted] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [mapHandle, setMapHandle] = useState<MapHandle | null>(null);
 
-  const routes = useRoutes(request);
-  const heat = useHeatmap(routes.data);
+  const routes = useRoutes(request, shifted);
+  const heat = useHeatmap(routes.data, anchor);
+
+  const submitTrip = useCallback((req: RoutesRequest) => {
+    setAnchor(req.departure);
+    setShifted(false);
+    setRequest(req);
+  }, []);
+  const shiftDeparture = useCallback((departure: string) => {
+    setShifted(true);
+    setRequest((r) => (r ? { ...r, departure } : r));
+  }, []);
   const health = useQuery({
     queryKey: ["health"],
     queryFn: ({ signal }) => getHealth(signal),
@@ -39,9 +48,7 @@ export function App() {
   useEffect(() => {
     checkpointStore.setHovered(null);
     checkpointStore.setPicked(null);
-    setSelection(
-      routes.data ? { id: routes.data.recommended_route_id, fit: false } : null,
-    );
+    setSelection(routes.data ? { id: routes.data.recommended_route_id, fit: false } : null);
   }, [routes.data]);
 
   const selectFromCard = useCallback((id: string) => {
@@ -54,12 +61,10 @@ export function App() {
   }, []);
 
   // Dev fixture mode plans the sample trip straight away.
-  const [initial] = useState(() =>
-    FIXTURE_MODE ? DEV_INITIAL_FORM() : undefined,
-  );
+  const [initial] = useState(() => (FIXTURE_MODE ? DEV_INITIAL_FORM() : undefined));
   useEffect(() => {
-    if (FIXTURE_MODE && initial?.request) setRequest(initial.request);
-  }, [initial]);
+    if (FIXTURE_MODE && initial?.request) submitTrip(initial.request);
+  }, [initial, submitTrip]);
 
   const data = routes.data;
   const selectedRoute = data?.routes.find((r) => r.id === selection?.id);
@@ -77,6 +82,8 @@ export function App() {
       onRetry={() => void heat.refetch()}
       route={selectedRoute}
       departure={data.departure}
+      replanning={routes.isPlaceholderData}
+      onDepartureChange={shiftDeparture}
     />
   ) : null;
 
@@ -93,21 +100,14 @@ export function App() {
 
           <main className="relative order-1 flex shrink-0 flex-col md:order-2 md:min-h-0 md:flex-1">
             <div className="relative h-[55dvh] min-h-[320px] md:h-auto md:min-h-0 md:flex-1">
-              <MapView
-                onReady={setMapHandle}
-                className="absolute inset-0 bg-ground"
-              />
+              <MapView onReady={setMapHandle} className="absolute inset-0 bg-ground" />
             </div>
             {heatPanel ? (
               <div className="px-4 pt-4 md:pointer-events-none md:absolute md:inset-x-3 md:bottom-8 md:flex md:justify-center md:p-0">
                 <div className="w-full md:max-w-[600px]">{heatPanel}</div>
               </div>
             ) : null}
-            <RouteLayers
-              data={data}
-              selection={selection}
-              onSelect={selectFromMap}
-            />
+            <RouteLayers data={data} selection={selection} onSelect={selectFromMap} />
           </main>
 
           {/* From md up the sidebar is a bounded panel, so it scrolls in a Base UI ScrollArea
@@ -124,12 +124,9 @@ export function App() {
             >
               <header className="flex flex-col gap-2">
                 <p className="label-mono text-ink-label">Spotter</p>
-                <h1 className="font-display text-[32px] leading-[1.06]">
-                  Route weather
-                </h1>
+                <h1 className="font-display text-[32px] leading-[1.06]">Route weather</h1>
                 <p className="text-[15px] leading-normal text-ink-secondary">
-                  Three truck routes, weather checked at the hour you reach each
-                  point, ranked for safety then time.
+                  Three truck routes, weather checked at the hour you reach each point, ranked for safety then time.
                 </p>
               </header>
 
@@ -137,42 +134,29 @@ export function App() {
                 <TripForm
                   initial={initial?.values}
                   pending={routes.isFetching}
-                  onSubmit={setRequest}
+                  departure={request?.departure}
+                  onSubmit={submitTrip}
                 />
               </div>
 
-              <div
-                aria-live="polite"
-                aria-busy={routes.isFetching}
-                className="flex flex-col gap-4"
-              >
+              <div aria-live="polite" aria-busy={routes.isFetching} className="flex flex-col gap-4">
                 {request === null ? (
                   <ResultsEmpty />
                 ) : routes.isPending ? (
                   <ResultsSkeleton />
                 ) : routes.isError ? (
-                  <ResultsError
-                    error={routes.error}
-                    onRetry={() => void routes.refetch()}
-                  />
+                  <ResultsError error={routes.error} onRetry={() => void routes.refetch()} />
                 ) : data ? (
-                  <ResultsPanel
-                    data={data}
-                    selectedId={selection?.id ?? null}
-                    onSelect={selectFromCard}
-                  />
+                  <div className={routes.isPlaceholderData ? "opacity-60 transition-opacity" : undefined}>
+                    <ResultsPanel data={data} selectedId={selection?.id ?? null} onSelect={selectFromCard} />
+                  </div>
                 ) : null}
               </div>
 
               <footer className="mt-auto pt-2 text-xs text-ink-label">
-                Weather from Open-Meteo. Routing from{" "}
-                {provider === "ors"
-                  ? "OpenRouteService (heavy goods profile)"
-                  : "OSRM"}
-                . Map data from OpenStreetMap via OpenFreeMap.
-                {FIXTURE_MODE
-                  ? " Showing the bundled sample trip (dev fixture)."
-                  : ""}
+                Weather from Open-Meteo. Routing from {provider === "ors" ? "OpenRouteService (heavy goods profile)" : "OSRM"}.
+                Map data from OpenStreetMap via OpenFreeMap.
+                {FIXTURE_MODE ? " Showing the bundled sample trip (dev fixture)." : ""}
               </footer>
             </ScrollArea.Default>
           </aside>

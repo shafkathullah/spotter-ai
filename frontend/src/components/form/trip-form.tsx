@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import type { IntervalMi, Place, RoutesRequest } from "@/api/types";
 import { Button } from "@/components/primitives/button";
@@ -24,10 +24,12 @@ const INTERVALS: readonly IntervalMi[] = [10, 25, 50];
 interface TripFormProps {
   initial?: Partial<TripFormValues>;
   pending: boolean;
+  /** Departure set from outside the form (the travel-window drag), as ISO; the field follows it. */
+  departure?: string;
   onSubmit: (req: RoutesRequest) => void;
 }
 
-export function TripForm({ initial, pending, onSubmit }: TripFormProps) {
+export function TripForm({ initial, pending, departure: departureIso, onSubmit }: TripFormProps) {
   const ids = { departure: useId(), load: useId(), interval: useId() };
   const [origin, setOrigin] = useState<Place | null>(initial?.origin ?? null);
   const [destination, setDestination] = useState<Place | null>(initial?.destination ?? null);
@@ -35,6 +37,10 @@ export function TripForm({ initial, pending, onSubmit }: TripFormProps) {
   const [load, setLoad] = useState(initial?.load ?? "40000");
   const [interval, setInterval] = useState<IntervalMi>(initial?.interval ?? 25);
   const [errors, setErrors] = useState<TripFormErrors>({});
+
+  useEffect(() => {
+    if (departureIso) setDeparture(toDateTimeLocalValue(new Date(departureIso)));
+  }, [departureIso]);
 
   const refs = {
     origin: useRef<HTMLInputElement>(null),

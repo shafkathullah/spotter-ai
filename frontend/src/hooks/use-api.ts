@@ -21,11 +21,17 @@ export function useGeocode(q: string) {
   });
 }
 
-export function useRoutes(req: RoutesRequest | null) {
+/**
+ * `keepPrevious`: keep showing the last answer while the next loads. Used when
+ * only the departure moved (the travel-window drag), so the map, heatmap and
+ * cards stay put instead of flashing to skeletons.
+ */
+export function useRoutes(req: RoutesRequest | null, keepPrevious = false) {
   return useQuery({
     queryKey: ["routes", req],
     queryFn: ({ signal }) => postRoutes(req as RoutesRequest, signal),
     enabled: req !== null,
+    placeholderData: keepPrevious ? keepPreviousData : undefined,
     staleTime: 10 * 60 * 1000,
     retry: false,
   });
@@ -34,24 +40,29 @@ export function useRoutes(req: RoutesRequest | null) {
 /** Max points per route line sent to /api/heatmap (contract: <= 200). */
 export const HEATMAP_LINE_MAX_POINTS = 200;
 
-export function heatmapRequestFor(data: RoutesResponse): HeatmapRequest {
+/**
+ * `anchor` is the departure the grid starts from: the one typed in the form.
+ * Moving the departure with the travel window keeps the anchor, so the grid
+ * (and its hour 0) stays put and only the routes are re-planned.
+ */
+export function heatmapRequestFor(data: RoutesResponse, anchor: string = data.departure): HeatmapRequest {
   return {
-    departure: data.departure,
+    departure: anchor,
     load_lb: data.load_lb,
     lines: data.routes.map((r) => simplifyToMax(r.geometry.coordinates as LonLat[], HEATMAP_LINE_MAX_POINTS)),
   };
 }
 
-export function useHeatmap(data: RoutesResponse | undefined) {
+export function useHeatmap(data: RoutesResponse | undefined, anchor?: string) {
   return useQuery({
-    // Departure, load and the route shapes decide the grid; the whole response is not a good key.
+    // Anchor, load and the route shapes decide the grid; the whole response is not a good key.
     queryKey: [
       "heatmap",
-      data?.departure,
+      anchor ?? data?.departure,
       data?.load_lb,
       data?.routes.map((r) => `${r.id}:${r.distance_mi}:${r.geometry.coordinates[0]?.join(",")}`).join("|"),
     ],
-    queryFn: ({ signal }) => postHeatmap(heatmapRequestFor(data as RoutesResponse), signal),
+    queryFn: ({ signal }) => postHeatmap(heatmapRequestFor(data as RoutesResponse, anchor), signal),
     enabled: data !== undefined,
     staleTime: 10 * 60 * 1000,
     retry: 1,

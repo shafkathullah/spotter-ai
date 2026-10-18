@@ -11,9 +11,9 @@ import { RiskLegend } from "@/components/ui/legend";
 import { formatDayTime, formatHourOffset, timeZoneAbbr } from "@/lib/format";
 import { HEAT_HOURS, HEAT_METRICS } from "@/lib/heatmap";
 import { type HeatMetric, THRESHOLDS } from "@/lib/risk";
-import { hoursBetween } from "@/lib/time";
-import { cn } from "@/lib/utils";
+import { hoursBetween, toIsoWithOffset } from "@/lib/time";
 import { HeatLayer } from "./heat-layer";
+import { TravelWindow } from "./travel-window";
 import { TruckMarker } from "./truck-marker";
 
 const MAX_HOUR = HEAT_HOURS - 1;
@@ -34,6 +34,10 @@ interface HeatmapPanelProps {
   onRetry: () => void;
   route: RouteOption | undefined;
   departure: string | undefined;
+  /** A re-plan for a moved departure is in flight. */
+  replanning: boolean;
+  /** Re-plan the trip with this departure (ISO with offset). */
+  onDepartureChange: (iso: string) => void;
 }
 
 /**
@@ -42,7 +46,16 @@ interface HeatmapPanelProps {
  * and the risk legend. Hour state lives here, so a slider step re-renders
  * only this card; the map work is in <HeatLayer>.
  */
-export function HeatmapPanel({ data, loading, error, onRetry, route, departure }: HeatmapPanelProps) {
+export function HeatmapPanel({
+  data,
+  loading,
+  error,
+  onRetry,
+  route,
+  departure,
+  replanning,
+  onDepartureChange,
+}: HeatmapPanelProps) {
   const titleId = useId();
   const [hour, setHour] = useState(0);
   const [metric, setMetric] = useState<HeatMetric>("risk");
@@ -70,13 +83,8 @@ export function HeatmapPanel({ data, loading, error, onRetry, route, departure }
   const tz = hourIso ? timeZoneAbbr(hourIso) : "";
 
   // The selected route's departure to arrival, in slider hours.
-  let windowStart: number | null = null;
-  let windowEnd: number | null = null;
-  if (data && route && departure) {
-    windowStart = Math.max(0, hoursBetween(data.start, departure));
-    windowEnd = Math.min(MAX_HOUR, hoursBetween(data.start, route.arrival));
-  }
-  const pct = (h: number) => `${(h / MAX_HOUR) * 100}%`;
+  const windowStart = data && departure ? hoursBetween(data.start, departure) : null;
+  const windowEnd = data && route ? hoursBetween(data.start, route.arrival) : null;
 
   return (
     <>
@@ -178,19 +186,20 @@ export function HeatmapPanel({ data, loading, error, onRetry, route, departure }
                 </Slider.Control>
               </Slider.Root>
               {windowStart !== null && windowEnd !== null && windowEnd > windowStart && route ? (
-                <div className="relative mt-1.5 h-4" aria-hidden>
-                  <span
-                    className="absolute top-0 h-1 rounded-tile bg-ink-nav/50"
-                    style={{ left: pct(windowStart), width: `calc(${pct(windowEnd)} - ${pct(windowStart)})` }}
-                  />
-                  <span
-                    className={cn("absolute top-1.5 text-xs whitespace-nowrap text-ink-label")}
-                    style={{ left: pct(windowStart) }}
-                  >
-                    {route.name} on the road
-                    {hoursBetween(data.start, route.arrival) > MAX_HOUR ? ", arrives after 48 h" : ""}
-                  </span>
-                </div>
+                <TravelWindow
+                  start={windowStart}
+                  end={windowEnd}
+                  maxHour={MAX_HOUR}
+                  gridStart={data.start}
+                  routeName={route.name}
+                  pending={replanning}
+                  onPreview={(h) => {
+                    if (h === null) return;
+                    setPlaying(false);
+                    setHour(Math.min(MAX_HOUR, Math.max(0, Math.round(h))));
+                  }}
+                  onCommit={(h) => onDepartureChange(toIsoWithOffset(new Date(Date.parse(data.start) + h * 3_600_000)))}
+                />
               ) : null}
             </div>
           </div>
