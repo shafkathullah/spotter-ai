@@ -101,6 +101,7 @@ flowchart LR
   - `null` hours are drawn transparent, not as Low.
   - The heat source's tiles stop at z4 and are overzoomed above it. MapLibre draws a circle only from the tile that holds its centre, so with native z11+ tiles (narrower than one disc) the wash disappeared when zoomed in.
 - The slider shows the selected route's departure-to-arrival window, and a dot shows where the truck would be at the slider hour.
+- That window is draggable (or focus it and use the arrow keys, Shift for 6 h). While it moves, the heatmap follows the window's start hour; on release the trip is re-planned with the new departure, so the cards, checkpoints and recommendation update. The grid stays anchored to the departure typed in the form, so it isn't fetched again, and the previous answer stays on screen while the re-plan loads.
 
 ## Assumptions
 
